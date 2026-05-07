@@ -85,7 +85,12 @@ async fn main() {
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("training portal running at http://{addr}");
+    let app_url = format!("http://{addr}");
+    println!("training portal running at {app_url}");
+
+    if let Err(err) = webbrowser::open(&app_url) {
+        eprintln!("could not open browser automatically: {err}");
+    }
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
