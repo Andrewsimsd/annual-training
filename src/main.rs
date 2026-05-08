@@ -1,8 +1,10 @@
 use axum::{
     Router,
+    body::Body,
     extract::{Form, State},
-    response::{Html, IntoResponse, Redirect},
-    routing::{get, post},
+    http::{HeaderValue, StatusCode, header},
+    response::{Html, IntoResponse, Redirect, Response},
+    routing::get,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -51,6 +53,7 @@ struct Certificate {
     score: usize,
     total: usize,
     digest: String,
+    verification_code: String,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +85,7 @@ async fn main() {
         .route("/", get(home))
         .route("/quiz", get(quiz_page).post(submit_quiz))
         .route("/result", get(result_page))
+        .route("/certificate/{cert_id}", get(download_certificate))
         .with_state(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
@@ -218,13 +222,19 @@ async fn submit_quiz(
             score,
             total,
             digest,
+            verification_code: verification_code(&id, &payload.employee_name, score, total),
         };
 
         let cert_json = serde_json::to_string_pretty(&cert).unwrap();
-        let path = state
+        let json_path = state
             .cert_dir
             .join(format!("certificate-{}.json", cert.cert_id));
-        let _ = tokio::fs::write(path, cert_json).await;
+        let _ = tokio::fs::write(json_path, cert_json).await;
+
+        let pdf_path = state
+            .cert_dir
+            .join(format!("certificate-{}.pdf", cert.cert_id));
+        let _ = tokio::fs::write(pdf_path, build_certificate_pdf(&cert)).await;
         cert_id = Some(id);
     }
 
@@ -260,7 +270,16 @@ async fn result_page(
 
     let cert_msg = if let Some(cert_id) = result.cert_id {
         format!(
-            "<p>Certificate issued. ID: <code>{cert_id}</code></p><p>Serialized certificate written under <code>./certificates</code>.</p>"
+            "<p>Certificate issued. ID: <code>{cert_id}</code></p>\
+<p>Your completion certificate is ready as a PDF. It includes a verification code that can be used to validate training completion.</p>\
+<p><a href='/certificate/{cert_id}' download>Download completion certificate (.pdf)</a></p>\
+<script>\
+setTimeout(function () {{\
+  if (confirm('You passed! Download your completion certificate PDF now?')) {{\
+    window.location.href = '/certificate/{cert_id}';\
+  }}\
+}}, 300);\
+</script>"
         )
     } else {
         "<p>No certificate issued. Please retake training and achieve at least 80%.</p>".to_string()
@@ -270,6 +289,102 @@ async fn result_page(
         "<h1>Exam Result: {status}</h1><p>Score: {}/{} ({:.1}%)</p>{}<p><a href='/'>Back to training portal</a></p>",
         result.score, result.total, pct, cert_msg
     ))
+}
+
+async fn download_certificate(
+    State(state): State<AppState>,
+    axum::extract::Path(cert_id): axum::extract::Path<String>,
+) -> Response {
+    let path = state.cert_dir.join(format!("certificate-{cert_id}.pdf"));
+
+    match tokio::fs::read(path).await {
+        Ok(bytes) => {
+            let mut res = Response::new(Body::from(bytes));
+            *res.status_mut() = StatusCode::OK;
+            res.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/pdf"),
+            );
+            let content_disposition = format!("attachment; filename=\"certificate-{cert_id}.pdf\"");
+            if let Ok(value) = HeaderValue::from_str(&content_disposition) {
+                res.headers_mut().insert(header::CONTENT_DISPOSITION, value);
+            }
+            res
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "Certificate not found").into_response(),
+    }
+}
+
+fn verification_code(cert_id: &str, employee_name: &str, score: usize, total: usize) -> String {
+    let digest = Sha256::digest(format!("verify:{cert_id}:{employee_name}:{score}:{total}"));
+    let hex = format!("{:x}", digest);
+    hex[..12].to_uppercase()
+}
+
+fn escape_pdf_text(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('(', "\\(")
+        .replace(')', "\\)")
+}
+
+fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
+    let lines = vec![
+        "Cybersecurity Annual Training Completion Certificate".to_string(),
+        format!("Employee: {}", cert.employee_name),
+        format!("Certificate ID: {}", cert.cert_id),
+        format!("Completed At (UTC): {}", cert.issued_at_utc),
+        format!(
+            "Score: {}/{} ({:.1}%)",
+            cert.score, cert.total, cert.score_percent
+        ),
+        format!("Verification Code: {}", cert.verification_code),
+        "Use the certificate ID and verification code to confirm completion.".to_string(),
+    ];
+
+    let mut content = String::from("BT\n/F1 18 Tf\n50 760 Td\n");
+    content.push_str("(Completion Certificate) Tj\n");
+    content.push_str("0 -28 Td\n/F1 12 Tf\n");
+
+    for line in lines {
+        content.push_str(&format!("({}) Tj\n0 -20 Td\n", escape_pdf_text(&line)));
+    }
+    content.push_str("ET\n");
+
+    let content_len = content.len();
+    let mut pdf = String::from("%PDF-1.4\n");
+    let mut offsets = vec![0usize];
+
+    offsets.push(pdf.len());
+    pdf.push_str("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    offsets.push(pdf.len());
+    pdf.push_str("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+    offsets.push(pdf.len());
+    pdf.push_str(
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+    );
+
+    offsets.push(pdf.len());
+    pdf.push_str("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+
+    offsets.push(pdf.len());
+    pdf.push_str(&format!(
+        "5 0 obj\n<< /Length {} >>\nstream\n{}endstream\nendobj\n",
+        content_len, content
+    ));
+
+    let xref_start = pdf.len();
+    pdf.push_str("xref\n0 6\n");
+    pdf.push_str("0000000000 65535 f \n");
+    for off in offsets.iter().skip(1) {
+        pdf.push_str(&format!("{:010} 00000 n \n", off));
+    }
+    pdf.push_str("trailer\n<< /Size 6 /Root 1 0 R >>\n");
+    pdf.push_str(&format!("startxref\n{}\n%%EOF\n", xref_start));
+
+    pdf.into_bytes()
 }
 
 fn seed_videos() -> Vec<Video> {
@@ -312,7 +427,7 @@ fn seed_questions() -> Vec<Question> {
         Question {
             prompt: "What format is the certificate file?",
             choices: ["PNG", "JSON", "PDF", "XLSX"],
-            correct: 1,
+            correct: 2,
         },
         Question {
             prompt: "How can future content be expanded?",

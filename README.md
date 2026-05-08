@@ -7,7 +7,7 @@ A local Rust web app that mimics mandatory annual cybersecurity training with me
 - Local web server on `127.0.0.1:3000`
 - Training landing page with embedded videos
 - Quiz workflow with a required passing score of **80%**
-- JSON certificate generation for passing attempts
+- PDF + JSON certificate generation for passing attempts, including a verification code
 - Seeded video/question content that can be extended for future modules and memes
 
 ## Requirements
@@ -32,11 +32,12 @@ When started, open:
 3. Enter your name and answer all quiz questions.
 4. Submit the exam.
 5. If score is `>= 80%`, a certificate file is written to:
+   - `./certificates/certificate-<uuid>.pdf`
    - `./certificates/certificate-<uuid>.json`
 
 ## Certificate format
 
-A passing certificate is serialized as JSON and includes:
+A passing certificate is generated as both PDF (for download) and JSON (for recordkeeping). The certificate includes:
 
 - `cert_id`
 - `employee_name`
@@ -45,6 +46,7 @@ A passing certificate is serialized as JSON and includes:
 - `score`
 - `total`
 - `digest`
+- `verification_code`
 
 ## Customize for more videos/memes
 
