@@ -6,6 +6,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
 };
+use rand::{rng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -18,6 +19,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 const PASS_THRESHOLD: f32 = 0.80;
+const QUIZ_QUESTION_COUNT: usize = 5;
+const ENABLE_DEBUG_SKIP: bool = true;
 
 #[derive(Clone)]
 struct AppState {
@@ -36,6 +39,7 @@ struct Video {
 
 #[derive(Clone)]
 struct Question {
+    id: &'static str,
     prompt: &'static str,
     choices: [&'static str; 4],
     correct: usize,
@@ -64,6 +68,8 @@ struct Certificate {
 #[derive(Deserialize)]
 struct QuizForm {
     employee_name: String,
+    selected_question_ids: String,
+    debug_skip: Option<String>,
     #[serde(flatten)]
     answers: HashMap<String, String>,
 }
@@ -162,7 +168,39 @@ async fn home(State(state): State<AppState>) -> Html<String> {
 }
 
 async fn quiz_page(State(state): State<AppState>) -> Html<String> {
-    let question_markup = state.quizzes.iter().enumerate().map(|(idx, q)| { let options = q.choices.iter().enumerate().map(|(choice_idx, choice)| format!("<label><input required type='radio' name='q{idx}' value='{choice_idx}'> {choice}</label><br>")).collect::<String>(); format!("<fieldset><legend><strong>Q{}:</strong> {}</legend>{}</fieldset><br>", idx + 1, q.prompt, options)}).collect::<String>();
+    let selected_questions = choose_quiz_questions(&state.quizzes, QUIZ_QUESTION_COUNT);
+    let selected_ids = selected_questions
+        .iter()
+        .map(|question| question.id)
+        .collect::<Vec<_>>()
+        .join(",");
+    let question_markup = selected_questions
+        .iter()
+        .enumerate()
+        .map(|(idx, q)| {
+            let options = q
+                .choices
+                .iter()
+                .enumerate()
+                .map(|(choice_idx, choice)| {
+                    format!(
+                        "<label><input required type='radio' name='q{idx}' value='{choice_idx}'> {choice}</label><br>"
+                    )
+                })
+                .collect::<String>();
+            format!(
+                "<fieldset><legend><strong>Q{}:</strong> {}</legend>{}</fieldset><br>",
+                idx + 1,
+                q.prompt,
+                options
+            )
+        })
+        .collect::<String>();
+    let skip_button = if ENABLE_DEBUG_SKIP {
+        "<button type='submit' name='debug_skip' value='1' formnovalidate style='margin-left: .75rem;'>Skip (Debug)</button>"
+    } else {
+        ""
+    };
     Html(format!(
         r"<!doctype html>
 <html><head><meta charset='utf-8'><title>Quiz</title></head>
@@ -170,11 +208,13 @@ async fn quiz_page(State(state): State<AppState>) -> Html<String> {
 <h1>Compliance Knowledge Check</h1>
 <form method='post' action='/quiz'>
 <label>Your full name: <input type='text' name='employee_name' required></label><br><br>
+<input type='hidden' name='selected_question_ids' value='{}'>
 {}
 <button type='submit'>Submit Exam</button>
+{}
 </form>
 </body></html>",
-        question_markup
+        selected_ids, question_markup, skip_button
     ))
 }
 
@@ -182,17 +222,30 @@ async fn submit_quiz(
     State(state): State<AppState>,
     Form(payload): Form<QuizForm>,
 ) -> impl IntoResponse {
-    let parsed_answers = parse_answers(&payload.answers);
-    let evaluation = evaluate_quiz(&state.quizzes, &parsed_answers);
+    let skip_requested = ENABLE_DEBUG_SKIP && payload.debug_skip.is_some();
+    let selected_questions = select_questions_by_id(&state.quizzes, &payload.selected_question_ids);
+    if selected_questions.is_empty() {
+        return Redirect::to("/quiz");
+    }
+    let parsed_answers = if skip_requested {
+        selected_questions
+            .iter()
+            .enumerate()
+            .map(|(idx, question)| (format!("q{idx}"), question.correct))
+            .collect()
+    } else {
+        parse_answers(&payload.answers)
+    };
+    let evaluation = evaluate_quiz(&selected_questions, &parsed_answers);
+    let employee_name = if skip_requested {
+        "debug".to_owned()
+    } else {
+        payload.employee_name
+    };
     let mut cert_id = None;
     if evaluation.passed {
         let id = Uuid::new_v4().to_string();
-        let cert = build_certificate(
-            &id,
-            &payload.employee_name,
-            evaluation.score,
-            evaluation.total,
-        );
+        let cert = build_certificate(&id, &employee_name, evaluation.score, evaluation.total);
         if let Err(err) = write_certificate_files(&state.cert_dir, &cert).await {
             eprintln!("failed to persist certificate files: {err}");
         } else {
@@ -224,6 +277,21 @@ fn parse_answers(raw_answers: &HashMap<String, String>) -> HashMap<String, usize
                 .ok()
                 .map(|parsed| (key.clone(), parsed))
         })
+        .collect()
+}
+fn choose_quiz_questions(question_bank: &[Question], question_count: usize) -> Vec<Question> {
+    let mut shuffled = question_bank.to_vec();
+    shuffled.shuffle(&mut rng());
+    shuffled
+        .into_iter()
+        .take(question_count.min(question_bank.len()))
+        .collect()
+}
+fn select_questions_by_id(question_bank: &[Question], raw_ids: &str) -> Vec<Question> {
+    raw_ids
+        .split(',')
+        .filter_map(|id| question_bank.iter().find(|question| question.id == id))
+        .cloned()
         .collect()
 }
 fn evaluate_quiz(questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation {
@@ -392,11 +460,13 @@ fn seed_videos() -> Vec<Video> {
 fn seed_questions() -> Vec<Question> {
     vec![
         Question {
+            id: "pass-threshold",
             prompt: "What is the minimum passing score for this training?",
             choices: ["50%", "70%", "80%", "100%"],
             correct: 2,
         },
         Question {
+            id: "certificate-location",
             prompt: "Where are certificates written after passing?",
             choices: [
                 "In memory only",
@@ -407,22 +477,58 @@ fn seed_questions() -> Vec<Question> {
             correct: 1,
         },
         Question {
+            id: "required-media",
             prompt: "What must you complete before taking the quiz?",
             choices: ["Tax documents", "Media modules", "Driver's test", "Nothing"],
             correct: 1,
         },
         Question {
+            id: "certificate-format",
             prompt: "What format is the certificate file?",
             choices: ["PNG", "JSON", "PDF", "XLSX"],
             correct: 2,
         },
         Question {
+            id: "content-expansion",
             prompt: "How can future content be expanded?",
             choices: [
                 "By editing seeded video/question lists",
                 "It cannot be expanded",
                 "Only with paid DLC",
                 "Only by reinstalling Rust",
+            ],
+            correct: 0,
+        },
+        Question {
+            id: "score-visibility",
+            prompt: "What is shown on the result page after submission?",
+            choices: [
+                "Only pass/fail",
+                "Score, total, and percent",
+                "A random meme",
+                "System environment variables",
+            ],
+            correct: 1,
+        },
+        Question {
+            id: "verification-purpose",
+            prompt: "What is the verification code used for?",
+            choices: [
+                "Unlocking admin mode",
+                "Resetting the quiz",
+                "Confirming certificate validity",
+                "Downloading the videos",
+            ],
+            correct: 2,
+        },
+        Question {
+            id: "web-address",
+            prompt: "Which local address does the training portal use by default?",
+            choices: [
+                "http://127.0.0.1:3000",
+                "http://0.0.0.0:80",
+                "https://localhost:8443",
+                "http://192.168.1.1:3000",
             ],
             correct: 0,
         },

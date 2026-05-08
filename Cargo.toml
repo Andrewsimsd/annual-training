@@ -12,3 +12,4 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
 sha2 = "0.10"
 webbrowser = "1"
+rand = "0.9"
