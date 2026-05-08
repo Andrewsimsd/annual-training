@@ -82,7 +82,7 @@ struct Certificate {
 struct QuizForm {
     employee_name: String,
     #[serde(flatten)]
-    answers: HashMap<String, usize>,
+    answers: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -223,7 +223,8 @@ async fn submit_quiz(
     State(state): State<AppState>,
     Form(payload): Form<QuizForm>,
 ) -> impl IntoResponse {
-    let evaluation = evaluate_quiz(&state.quizzes, &payload.answers);
+    let parsed_answers = parse_answers(&payload.answers);
+    let evaluation = evaluate_quiz(&state.quizzes, &parsed_answers);
     let mut cert_id = None;
 
     if evaluation.passed {
@@ -254,6 +255,21 @@ async fn submit_quiz(
     );
 
     Redirect::to(&format!("/result?ticket={ticket}"))
+}
+
+fn parse_answers(raw_answers: &HashMap<String, String>) -> HashMap<String, usize> {
+    raw_answers
+        .iter()
+        .filter_map(|(key, value)| {
+            if !key.starts_with('q') {
+                return None;
+            }
+            value
+                .parse::<usize>()
+                .ok()
+                .map(|parsed| (key.clone(), parsed))
+        })
+        .collect()
 }
 
 fn evaluate_quiz(questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation {
@@ -508,6 +524,17 @@ mod tests {
         let answers = HashMap::new();
         let evaluation = evaluate_quiz(&questions, &answers);
         assert_eq!(evaluation.score, 0);
+    }
+
+    #[test]
+    fn parse_answers_ignores_non_numeric_values() {
+        let mut raw = HashMap::new();
+        raw.insert("q0".to_string(), "2".to_string());
+        raw.insert("employee_name".to_string(), "Alice".to_string());
+        raw.insert("q1".to_string(), "not-a-number".to_string());
+
+        let parsed = parse_answers(&raw);
+        assert_eq!(parsed.get("q0"), Some(&2));
     }
 
     #[test]
