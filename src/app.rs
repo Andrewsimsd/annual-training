@@ -452,13 +452,18 @@ fn seed_videos() -> Vec<Video> {
         },
         Video {
             title: "Module 2: Meme Resilience Drills",
-            url: "https://www.youtube.com/embed/2aj-8lmB5q8",
-            description: "Secondary media module for transcript-driven awareness prompts (updated assignment link).",
+            url: "https://www.youtube.com/embed/W7Hoz2ZHYZM",
+            description: "Secondary media module (configurable for future meme additions).",
         },
         Video {
             title: "Module 3: Social-Engineering Pattern Recognition",
             url: "https://www.youtube.com/embed/7cqOEr_yfak",
             description: "Required viewing: 'Look how dat boy mind me!' to practice identifying attention-grabbing social cues.",
+        },
+        Video {
+            title: "Module 4: Transcript Analysis Practicum",
+            url: "https://www.youtube.com/embed/2aj-8lmB5q8",
+            description: "New assignment module: review transcript cues and derive quiz-ready observations.",
         },
     ]
 }
@@ -490,17 +495,34 @@ fn seed_questions() -> Vec<Question> {
         Question {
             id: "module-two-url-check",
             prompt: "Which YouTube video ID is used for Module 2 in this training portal?",
-            choices: ["dQw4w9WgXcQ", "2aj-8lmB5q8", "xt5ghXdq6Z0", "7cqOEr_yfak"],
+            choices: ["dQw4w9WgXcQ", "W7Hoz2ZHYZM", "xt5ghXdq6Z0", "7cqOEr_yfak"],
             correct: 1,
         },
         Question {
-            id: "module-two-assignment-focus",
-            prompt: "What is the primary learning method expected from Module 2 in this portal?",
+            id: "module-two-theme",
+            prompt: "What competency does Module 2 emphasize in its title?",
             choices: [
-                "Deriving quiz questions from the video's transcript",
-                "Completing a cloud migration runbook",
-                "Submitting SOC 2 evidence to legal",
-                "Escalating incidents to the help desk",
+                "Cloud migration governance",
+                "Meme resilience drills",
+                "SOC 2 audit evidence",
+                "Incident ticket triage",
+            ],
+            correct: 1,
+        },
+        Question {
+            id: "module-four-url-check",
+            prompt: "Which YouTube video ID is used for the new Module 4 transcript practicum?",
+            choices: ["2aj-8lmB5q8", "W7Hoz2ZHYZM", "xt5ghXdq6Z0", "7cqOEr_yfak"],
+            correct: 0,
+        },
+        Question {
+            id: "module-four-method",
+            prompt: "What does Module 4 explicitly ask learners to do?",
+            choices: [
+                "Review transcript cues and derive quiz-ready observations",
+                "Submit payroll approvals in the HR system",
+                "Provision a production Kubernetes cluster",
+                "Disable endpoint protection for troubleshooting",
             ],
             correct: 0,
         },
