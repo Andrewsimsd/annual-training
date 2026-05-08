@@ -197,7 +197,7 @@ async fn quiz_page(State(state): State<AppState>) -> Html<String> {
         })
         .collect::<String>();
     let skip_button = if ENABLE_DEBUG_SKIP {
-        "<button type='submit' name='debug_skip' value='1' style='margin-left: .75rem;'>Skip (Debug)</button>"
+        "<button type='submit' name='debug_skip' value='1' formnovalidate style='margin-left: .75rem;'>Skip (Debug)</button>"
     } else {
         ""
     };
@@ -222,29 +222,30 @@ async fn submit_quiz(
     State(state): State<AppState>,
     Form(payload): Form<QuizForm>,
 ) -> impl IntoResponse {
+    let skip_requested = ENABLE_DEBUG_SKIP && payload.debug_skip.is_some();
     let selected_questions = select_questions_by_id(&state.quizzes, &payload.selected_question_ids);
     if selected_questions.is_empty() {
         return Redirect::to("/quiz");
     }
-    let parsed_answers = parse_answers(&payload.answers);
-    let evaluation = if ENABLE_DEBUG_SKIP && payload.debug_skip.is_some() {
-        QuizEvaluation {
-            score: selected_questions.len(),
-            total: selected_questions.len(),
-            passed: true,
-        }
+    let parsed_answers = if skip_requested {
+        selected_questions
+            .iter()
+            .enumerate()
+            .map(|(idx, question)| (format!("q{idx}"), question.correct))
+            .collect()
     } else {
-        evaluate_quiz(&selected_questions, &parsed_answers)
+        parse_answers(&payload.answers)
+    };
+    let evaluation = evaluate_quiz(&selected_questions, &parsed_answers);
+    let employee_name = if skip_requested {
+        "debug".to_owned()
+    } else {
+        payload.employee_name
     };
     let mut cert_id = None;
     if evaluation.passed {
         let id = Uuid::new_v4().to_string();
-        let cert = build_certificate(
-            &id,
-            &payload.employee_name,
-            evaluation.score,
-            evaluation.total,
-        );
+        let cert = build_certificate(&id, &employee_name, evaluation.score, evaluation.total);
         if let Err(err) = write_certificate_files(&state.cert_dir, &cert).await {
             eprintln!("failed to persist certificate files: {err}");
         } else {
