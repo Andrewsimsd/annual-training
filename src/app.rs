@@ -455,6 +455,11 @@ fn seed_videos() -> Vec<Video> {
             url: "https://www.youtube.com/embed/dQw4w9WgXcQ",
             description: "Secondary media module (configurable for future meme additions).",
         },
+        Video {
+            title: "Module 3: Social-Engineering Pattern Recognition",
+            url: "https://www.youtube.com/embed/7cqOEr_yfak",
+            description: "Required viewing: 'Look how dat boy mind me!' to practice identifying attention-grabbing social cues.",
+        },
     ]
 }
 fn seed_questions() -> Vec<Question> {
@@ -520,6 +525,28 @@ fn seed_questions() -> Vec<Question> {
                 "Downloading the videos",
             ],
             correct: 2,
+        },
+        Question {
+            id: "module-three-theme",
+            prompt: "What scenario is featured in Module 3?",
+            choices: [
+                "A boardroom compliance meeting",
+                "Joby and Lonnie at the beach",
+                "A phishing simulation inbox",
+                "A password reset tutorial",
+            ],
+            correct: 1,
+        },
+        Question {
+            id: "module-three-phrase",
+            prompt: "Which phrase is called out in the Module 3 title?",
+            choices: [
+                "Please verify your MFA token",
+                "Look how dat boy mind me!",
+                "Never trust, always verify",
+                "Security starts with you",
+            ],
+            correct: 1,
         },
         Question {
             id: "web-address",

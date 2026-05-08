@@ -54,7 +54,7 @@ A passing certificate is generated as both PDF (for download) and JSON (for reco
 
 Edit the seed functions in `src/app.rs`:
 
-- `seed_videos()` to add/remove video modules
+- `seed_videos()` to add/remove video modules (now includes Module 3 with the new required video)
 - `seed_questions()` to add/remove quiz items
 
 ### Add a video
