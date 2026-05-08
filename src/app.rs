@@ -452,8 +452,8 @@ fn seed_videos() -> Vec<Video> {
         },
         Video {
             title: "Module 2: Meme Resilience Drills",
-            url: "https://www.youtube.com/embed/W7Hoz2ZHYZM",
-            description: "Secondary media module (configurable for future meme additions).",
+            url: "https://www.youtube.com/embed/2aj-8lmB5q8",
+            description: "Secondary media module for transcript-driven awareness prompts (updated assignment link).",
         },
         Video {
             title: "Module 3: Social-Engineering Pattern Recognition",
@@ -490,19 +490,19 @@ fn seed_questions() -> Vec<Question> {
         Question {
             id: "module-two-url-check",
             prompt: "Which YouTube video ID is used for Module 2 in this training portal?",
-            choices: ["dQw4w9WgXcQ", "W7Hoz2ZHYZM", "xt5ghXdq6Z0", "7cqOEr_yfak"],
+            choices: ["dQw4w9WgXcQ", "2aj-8lmB5q8", "xt5ghXdq6Z0", "7cqOEr_yfak"],
             correct: 1,
         },
         Question {
-            id: "module-two-theme",
-            prompt: "What competency does Module 2 emphasize in its title?",
+            id: "module-two-assignment-focus",
+            prompt: "What is the primary learning method expected from Module 2 in this portal?",
             choices: [
-                "Cloud migration governance",
-                "Meme resilience drills",
-                "SOC 2 audit evidence",
-                "Incident ticket triage",
+                "Deriving quiz questions from the video's transcript",
+                "Completing a cloud migration runbook",
+                "Submitting SOC 2 evidence to legal",
+                "Escalating incidents to the help desk",
             ],
-            correct: 1,
+            correct: 0,
         },
         Question {
             id: "module-three-title-callout",
