@@ -399,6 +399,9 @@ Modules should be organized around cohesive responsibilities.
 
 Preferred patterns:
 
+
+- Organize reusable logic into dedicated modules instead of concentrating implementation in `main.rs`.
+- Keep `main.rs` as a thin entrypoint that delegates to module/library code for orchestration.
 - `config` for configuration types and loading
 - `error` for error types
 - `parser` or `parse` for parsing logic
