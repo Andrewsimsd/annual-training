@@ -71,7 +71,7 @@ Append another `Question` entry in `seed_questions()` with:
 - exactly 4 `choices`
 - `correct` index (0-based)
 
-> Note: `QuizForm` is currently fixed to 5 fields (`q0..q4`). If you change question count, update `QuizForm` and answer collection logic accordingly.
+> Note: Quiz answers are parsed dynamically from `q{index}` form field names, so you can add or remove questions without changing the form type.
 
 ## Development checks
 

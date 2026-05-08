@@ -1,14 +1,36 @@
+#![allow(
+    clippy::format_push_string,
+    reason = "HTML/PDF template assembly benefits from straightforward string appends."
+)]
+#![allow(
+    clippy::cast_precision_loss,
+    reason = "Quiz scores are tiny bounded values; conversion to float is safe for percentage display."
+)]
+#![allow(
+    clippy::uninlined_format_args,
+    reason = "Keeping format placeholders positional improves readability in long template literals."
+)]
+#![allow(
+    clippy::format_collect,
+    reason = "Map/collect style keeps rendering logic concise and maintainable for small template output."
+)]
+
 use axum::{
     Router,
     body::Body,
-    extract::{Form, State},
+    extract::{Form, Path, Query, State},
     http::{HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    path::{Path as StdPath, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -59,11 +81,15 @@ struct Certificate {
 #[derive(Deserialize)]
 struct QuizForm {
     employee_name: String,
-    q0: usize,
-    q1: usize,
-    q2: usize,
-    q3: usize,
-    q4: usize,
+    #[serde(flatten)]
+    answers: HashMap<String, String>,
+}
+
+#[derive(Debug)]
+struct QuizEvaluation {
+    score: usize,
+    total: usize,
+    passed: bool,
 }
 
 #[tokio::main]
@@ -96,8 +122,17 @@ async fn main() {
         eprintln!("could not open browser automatically: {err}");
     }
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(err) => {
+            eprintln!("could not bind listener: {err}");
+            return;
+        }
+    };
+
+    if let Err(err) = axum::serve(listener, app).await {
+        eprintln!("server error: {err}");
+    }
 }
 
 async fn home(State(state): State<AppState>) -> Html<String> {
@@ -106,11 +141,11 @@ async fn home(State(state): State<AppState>) -> Html<String> {
         .iter()
         .map(|v| {
             format!(
-                r#"<section class='card'>
+                r"<section class='card'>
 <h3>{}</h3>
 <p>{}</p>
 <iframe width='560' height='315' src='{}' title='{}' allowfullscreen></iframe>
-</section>"#,
+</section>",
                 v.title, v.description, v.url, v.title
             )
         })
@@ -118,7 +153,7 @@ async fn home(State(state): State<AppState>) -> Html<String> {
         .join("\n");
 
     Html(format!(
-        r#"<!doctype html>
+        r"<!doctype html>
 <html>
   <head>
     <meta charset='utf-8'>
@@ -139,7 +174,7 @@ async fn home(State(state): State<AppState>) -> Html<String> {
     {}
     <a class='btn' href='/quiz'>Proceed to Compliance Quiz</a>
   </body>
-</html>"#,
+</html>",
         videos_html
     ))
 }
@@ -170,7 +205,7 @@ async fn quiz_page(State(state): State<AppState>) -> Html<String> {
         .collect::<String>();
 
     Html(format!(
-        r#"<!doctype html>
+        r"<!doctype html>
 <html><head><meta charset='utf-8'><title>Quiz</title></head>
 <body style='font-family: Arial, sans-serif; max-width: 850px; margin: 2rem auto;'>
 <h1>Compliance Knowledge Check</h1>
@@ -179,7 +214,7 @@ async fn quiz_page(State(state): State<AppState>) -> Html<String> {
 {}
 <button type='submit'>Submit Exam</button>
 </form>
-</body></html>"#,
+</body></html>",
         question_markup
     ))
 }
@@ -188,63 +223,33 @@ async fn submit_quiz(
     State(state): State<AppState>,
     Form(payload): Form<QuizForm>,
 ) -> impl IntoResponse {
-    let answers = [payload.q0, payload.q1, payload.q2, payload.q3, payload.q4];
-
-    let score = state
-        .quizzes
-        .iter()
-        .zip(answers.iter())
-        .filter(|(q, ans)| q.correct == **ans)
-        .count();
-
-    let total = state.quizzes.len();
-    let pct = score as f32 / total as f32;
-    let passed = pct >= PASS_THRESHOLD;
-
+    let parsed_answers = parse_answers(&payload.answers);
+    let evaluation = evaluate_quiz(&state.quizzes, &parsed_answers);
     let mut cert_id = None;
 
-    if passed {
+    if evaluation.passed {
         let id = Uuid::new_v4().to_string();
-        let issued_at_utc = chrono::Utc::now().to_rfc3339();
-        let digest = format!(
-            "{:x}",
-            Sha256::digest(format!(
-                "{}:{}:{}:{}",
-                id, payload.employee_name, score, total
-            ))
+        let cert = build_certificate(
+            &id,
+            &payload.employee_name,
+            evaluation.score,
+            evaluation.total,
         );
 
-        let cert = Certificate {
-            cert_id: id.clone(),
-            employee_name: payload.employee_name.clone(),
-            issued_at_utc,
-            score_percent: pct * 100.0,
-            score,
-            total,
-            digest,
-            verification_code: verification_code(&id, &payload.employee_name, score, total),
-        };
-
-        let cert_json = serde_json::to_string_pretty(&cert).unwrap();
-        let json_path = state
-            .cert_dir
-            .join(format!("certificate-{}.json", cert.cert_id));
-        let _ = tokio::fs::write(json_path, cert_json).await;
-
-        let pdf_path = state
-            .cert_dir
-            .join(format!("certificate-{}.pdf", cert.cert_id));
-        let _ = tokio::fs::write(pdf_path, build_certificate_pdf(&cert)).await;
-        cert_id = Some(id);
+        if let Err(err) = write_certificate_files(&state.cert_dir, &cert).await {
+            eprintln!("failed to persist certificate files: {err}");
+        } else {
+            cert_id = Some(id);
+        }
     }
 
     let ticket = Uuid::new_v4().to_string();
     state.results.write().await.insert(
         ticket.clone(),
         ExamAttempt {
-            score,
-            total,
-            passed,
+            score: evaluation.score,
+            total: evaluation.total,
+            passed: evaluation.passed,
             cert_id,
         },
     );
@@ -252,9 +257,76 @@ async fn submit_quiz(
     Redirect::to(&format!("/result?ticket={ticket}"))
 }
 
+fn parse_answers(raw_answers: &HashMap<String, String>) -> HashMap<String, usize> {
+    raw_answers
+        .iter()
+        .filter_map(|(key, value)| {
+            if !key.starts_with('q') {
+                return None;
+            }
+            value
+                .parse::<usize>()
+                .ok()
+                .map(|parsed| (key.clone(), parsed))
+        })
+        .collect()
+}
+
+fn evaluate_quiz(questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation {
+    let score = questions
+        .iter()
+        .enumerate()
+        .filter(
+            |(idx, q)| matches!(answers.get(&format!("q{idx}")), Some(ans) if *ans == q.correct),
+        )
+        .count();
+
+    let total = questions.len();
+    let pct = score as f32 / total as f32;
+
+    QuizEvaluation {
+        score,
+        total,
+        passed: pct >= PASS_THRESHOLD,
+    }
+}
+
+fn build_certificate(
+    cert_id: &str,
+    employee_name: &str,
+    score: usize,
+    total: usize,
+) -> Certificate {
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(format!("{cert_id}:{employee_name}:{score}:{total}"))
+    );
+
+    Certificate {
+        cert_id: cert_id.to_owned(),
+        employee_name: employee_name.to_owned(),
+        issued_at_utc: chrono::Utc::now().to_rfc3339(),
+        score_percent: (score as f32 / total as f32) * 100.0,
+        score,
+        total,
+        digest,
+        verification_code: verification_code(cert_id, employee_name, score, total),
+    }
+}
+
+async fn write_certificate_files(cert_dir: &StdPath, cert: &Certificate) -> std::io::Result<()> {
+    let cert_json = serde_json::to_string_pretty(cert)
+        .map_err(|err| std::io::Error::other(format!("serialization error: {err}")))?;
+    let json_path = cert_dir.join(format!("certificate-{}.json", cert.cert_id));
+    tokio::fs::write(json_path, cert_json).await?;
+
+    let pdf_path = cert_dir.join(format!("certificate-{}.pdf", cert.cert_id));
+    tokio::fs::write(pdf_path, build_certificate_pdf(cert)).await
+}
+
 async fn result_page(
     State(state): State<AppState>,
-    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Html<String> {
     let Some(ticket) = params.get("ticket") else {
         return Html("<h1>Missing ticket.</h1>".to_string());
@@ -293,7 +365,7 @@ setTimeout(function () {{\
 
 async fn download_certificate(
     State(state): State<AppState>,
-    axum::extract::Path(cert_id): axum::extract::Path<String>,
+    Path(cert_id): Path<String>,
 ) -> Response {
     let path = state.cert_dir.join(format!("certificate-{cert_id}.pdf"));
 
@@ -329,6 +401,7 @@ fn escape_pdf_text(input: &str) -> String {
 }
 
 fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
+    /* unchanged */
     let lines = vec![
         "Cybersecurity Annual Training Completion Certificate".to_string(),
         format!("Employee: {}", cert.employee_name),
@@ -341,40 +414,29 @@ fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
         format!("Verification Code: {}", cert.verification_code),
         "Use the certificate ID and verification code to confirm completion.".to_string(),
     ];
-
     let mut content = String::from("BT\n/F1 18 Tf\n50 760 Td\n");
     content.push_str("(Completion Certificate) Tj\n");
     content.push_str("0 -28 Td\n/F1 12 Tf\n");
-
     for line in lines {
         content.push_str(&format!("({}) Tj\n0 -20 Td\n", escape_pdf_text(&line)));
     }
     content.push_str("ET\n");
-
     let content_len = content.len();
     let mut pdf = String::from("%PDF-1.4\n");
     let mut offsets = vec![0usize];
-
     offsets.push(pdf.len());
     pdf.push_str("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
-
     offsets.push(pdf.len());
     pdf.push_str("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
-
     offsets.push(pdf.len());
-    pdf.push_str(
-        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
-    );
-
+    pdf.push_str("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n");
     offsets.push(pdf.len());
     pdf.push_str("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
-
     offsets.push(pdf.len());
     pdf.push_str(&format!(
         "5 0 obj\n<< /Length {} >>\nstream\n{}endstream\nendobj\n",
         content_len, content
     ));
-
     let xref_start = pdf.len();
     pdf.push_str("xref\n0 6\n");
     pdf.push_str("0000000000 65535 f \n");
@@ -383,7 +445,6 @@ fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
     }
     pdf.push_str("trailer\n<< /Size 6 /Root 1 0 R >>\n");
     pdf.push_str(&format!("startxref\n{}\n%%EOF\n", xref_start));
-
     pdf.into_bytes()
 }
 
@@ -440,4 +501,45 @@ fn seed_questions() -> Vec<Question> {
             correct: 0,
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn evaluate_quiz_returns_pass_when_threshold_is_met() {
+        let questions = seed_questions();
+        let mut answers = HashMap::new();
+        for (idx, question) in questions.iter().enumerate() {
+            answers.insert(format!("q{idx}"), question.correct);
+        }
+        let evaluation = evaluate_quiz(&questions, &answers);
+        assert!(evaluation.passed);
+    }
+
+    #[test]
+    fn evaluate_quiz_handles_missing_answers_as_incorrect() {
+        let questions = seed_questions();
+        let answers = HashMap::new();
+        let evaluation = evaluate_quiz(&questions, &answers);
+        assert_eq!(evaluation.score, 0);
+    }
+
+    #[test]
+    fn parse_answers_ignores_non_numeric_values() {
+        let mut raw = HashMap::new();
+        raw.insert("q0".to_string(), "2".to_string());
+        raw.insert("employee_name".to_string(), "Alice".to_string());
+        raw.insert("q1".to_string(), "not-a-number".to_string());
+
+        let parsed = parse_answers(&raw);
+        assert_eq!(parsed.get("q0"), Some(&2));
+    }
+
+    #[test]
+    fn verification_code_is_stable_for_same_input() {
+        let code = verification_code("abc", "Jane", 4, 5);
+        assert_eq!(code, verification_code("abc", "Jane", 4, 5));
+    }
 }
