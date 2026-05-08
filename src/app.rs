@@ -460,6 +460,11 @@ fn seed_videos() -> Vec<Video> {
             url: "https://www.youtube.com/embed/7cqOEr_yfak",
             description: "Required viewing: 'Look how dat boy mind me!' to practice identifying attention-grabbing social cues.",
         },
+        Video {
+            title: "Module 4: Transcript Analysis Practicum",
+            url: "https://www.youtube.com/embed/2aj-8lmB5q8",
+            description: "New assignment module: review transcript cues and derive quiz-ready observations.",
+        },
     ]
 }
 fn seed_questions() -> Vec<Question> {
@@ -503,6 +508,23 @@ fn seed_questions() -> Vec<Question> {
                 "Incident ticket triage",
             ],
             correct: 1,
+        },
+        Question {
+            id: "module-four-url-check",
+            prompt: "Which YouTube video ID is used for the new Module 4 transcript practicum?",
+            choices: ["2aj-8lmB5q8", "W7Hoz2ZHYZM", "xt5ghXdq6Z0", "7cqOEr_yfak"],
+            correct: 0,
+        },
+        Question {
+            id: "module-four-method",
+            prompt: "What does Module 4 explicitly ask learners to do?",
+            choices: [
+                "Review transcript cues and derive quiz-ready observations",
+                "Submit payroll approvals in the HR system",
+                "Provision a production Kubernetes cluster",
+                "Disable endpoint protection for troubleshooting",
+            ],
+            correct: 0,
         },
         Question {
             id: "module-three-title-callout",
