@@ -490,13 +490,13 @@ S
 Q
 \
 q
-190 0 0 190 90 220 cm
+170 0 0 170 545 85 cm
 /Im1 Do
 Q
 \
 BT
 /F1 38 Tf
-250 500 Td
+80 500 Td
 (Completion Certificate) Tj
 \
 0 -44 Td
