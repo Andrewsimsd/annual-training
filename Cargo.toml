@@ -13,3 +13,5 @@ chrono = { version = "0.4", features = ["clock"] }
 sha2 = "0.10"
 webbrowser = "1"
 rand = "0.9"
+image = { version = "0.25", default-features = false, features = ["png"] }
+flate2 = "1"
