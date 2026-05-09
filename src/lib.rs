@@ -16,5 +16,7 @@
 )]
 
 pub mod app;
+mod certificate;
+mod quiz;
 
 pub use app::run;
