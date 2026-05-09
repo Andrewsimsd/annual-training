@@ -704,27 +704,28 @@ fn encode_badge_streams(png_bytes: &[u8]) -> std::io::Result<(u32, u32, Vec<u8>,
 fn seed_videos() -> Vec<Video> {
     vec![
         Video {
-            title: "Module 1: Threat Awareness Through Cultural Study",
+            title: "Module 1: Lemme Smang it",
             url: "https://www.youtube.com/embed/xt5ghXdq6Z0",
-            description: "Mandatory viewing: 'Lemme Smang It' as interpreted through enterprise risk narratives.",
+            description: "The dangers of Smash-Bang-Fusion.",
         },
         Video {
-            title: "Module 2: Fundamentals of Maintainability and Supply Chain Risk Analysis",
+            title: "Module 2: Liquid Slam",
             url: "https://www.youtube.com/embed/W7Hoz2ZHYZM",
-            description: "Mandatory viewing: Prevent your code base from becoming the liquid slam monster by practicing good repository hygiene.",
+            description: "Prevent your code base from becoming the liquid slam monster by practicing good repository hygiene.",
         },
         Video {
-            title: "Module 3: Social-Engineering Pattern Recognition",
+            title: "Module 3: Look how dat boy mind me!",
             url: "https://www.youtube.com/embed/7cqOEr_yfak",
-            description: "Required viewing: 'Look how dat boy mind me!' to practice identifying attention-grabbing social cues.",
+            description: "Common traps in software testing.",
         },
         Video {
-            title: "Module 4: Learning When to Say No.",
+            title: "Module 4: Asset Acquisition",
             url: "https://www.youtube.com/embed/2aj-8lmB5q8",
-            description: "New assignment module: Knowing when to say no is important, but sometimes you have to deal with consequences.",
+            description: "The consequences of not providing a team with the assets they need to succeed.",
         },
     ]
 }
+
 fn seed_questions() -> Vec<Question> {
     vec![
         Question {
