@@ -496,7 +496,7 @@ Q
 \
 BT
 /F1 38 Tf
-350 500 Td
+250 500 Td
 (Completion Certificate) Tj
 \
 0 -44 Td
