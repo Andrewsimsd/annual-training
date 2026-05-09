@@ -15,51 +15,82 @@ pub(crate) struct Certificate {
     pub(crate) verification_code: String,
 }
 
-pub(crate) fn build_certificate(
-    cert_id: &str,
-    employee_name: &str,
-    score: usize,
-    total: usize,
-) -> Certificate {
-    let digest = format!(
-        "{:x}",
-        Sha256::digest(format!("{cert_id}:{employee_name}:{score}:{total}"))
-    );
-    Certificate {
-        cert_id: cert_id.to_owned(),
-        employee_name: employee_name.to_owned(),
-        issued_at_utc: chrono::Utc::now().to_rfc3339(),
-        score_percent: (score as f32 / total as f32) * 100.0,
-        score,
-        total,
-        digest,
-        verification_code: verification_code(cert_id, employee_name, score, total),
+pub(crate) trait CertificateOperations {
+    fn build_certificate(
+        &self,
+        cert_id: &str,
+        employee_name: &str,
+        score: usize,
+        total: usize,
+    ) -> Certificate;
+
+    async fn write_certificate_files(
+        &self,
+        cert_dir: &StdPath,
+        cert: &Certificate,
+    ) -> std::io::Result<()>;
+
+    fn verification_code(
+        &self,
+        cert_id: &str,
+        employee_name: &str,
+        score: usize,
+        total: usize,
+    ) -> String;
+}
+
+pub(crate) struct CertificateService;
+
+impl CertificateOperations for CertificateService {
+    fn build_certificate(
+        &self,
+        cert_id: &str,
+        employee_name: &str,
+        score: usize,
+        total: usize,
+    ) -> Certificate {
+        let digest = format!(
+            "{:x}",
+            Sha256::digest(format!("{cert_id}:{employee_name}:{score}:{total}"))
+        );
+        Certificate {
+            cert_id: cert_id.to_owned(),
+            employee_name: employee_name.to_owned(),
+            issued_at_utc: chrono::Utc::now().to_rfc3339(),
+            score_percent: (score as f32 / total as f32) * 100.0,
+            score,
+            total,
+            digest,
+            verification_code: self.verification_code(cert_id, employee_name, score, total),
+        }
     }
-}
 
-pub(crate) async fn write_certificate_files(
-    cert_dir: &StdPath,
-    cert: &Certificate,
-) -> std::io::Result<()> {
-    let badge_path = StdPath::new("resources").join("badge.png");
-    let badge_bytes = tokio::fs::read(&badge_path).await?;
-    let cert_json = serde_json::to_string_pretty(cert)
-        .map_err(|err| std::io::Error::other(format!("serialization error: {err}")))?;
-    let json_path = cert_dir.join(format!("certificate-{}.json", cert.cert_id));
-    tokio::fs::write(json_path, cert_json).await?;
-    let pdf_path = cert_dir.join(format!("certificate-{}.pdf", cert.cert_id));
-    tokio::fs::write(pdf_path, build_certificate_pdf(cert, &badge_bytes)?).await
-}
+    async fn write_certificate_files(
+        &self,
+        cert_dir: &StdPath,
+        cert: &Certificate,
+    ) -> std::io::Result<()> {
+        let badge_path = StdPath::new("resources").join("badge.png");
+        let badge_bytes = tokio::fs::read(&badge_path).await?;
+        let cert_json = serde_json::to_string_pretty(cert)
+            .map_err(|err| std::io::Error::other(format!("serialization error: {err}")))?;
+        let json_path = cert_dir.join(format!("certificate-{}.json", cert.cert_id));
+        tokio::fs::write(json_path, cert_json).await?;
+        let pdf_path = cert_dir.join(format!("certificate-{}.pdf", cert.cert_id));
+        tokio::fs::write(pdf_path, build_certificate_pdf(cert, &badge_bytes)?).await
+    }
 
-pub(crate) fn verification_code(
-    cert_id: &str,
-    employee_name: &str,
-    score: usize,
-    total: usize,
-) -> String {
-    let digest = Sha256::digest(format!("verify:{cert_id}:{employee_name}:{score}:{total}"));
-    let hex = format!("{:x}", digest);
-    hex[..12].to_uppercase()
+    fn verification_code(
+        &self,
+        cert_id: &str,
+        employee_name: &str,
+        score: usize,
+        total: usize,
+    ) -> String {
+        let digest = Sha256::digest(format!("verify:{cert_id}:{employee_name}:{score}:{total}"));
+        let hex = format!("{:x}", digest);
+        hex[..12].to_uppercase()
+    }
 }
 
 fn escape_pdf_text(input: &str) -> String {
