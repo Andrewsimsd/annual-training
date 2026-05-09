@@ -145,7 +145,7 @@ async fn home(State(state): State<AppState>) -> Html<String> {
 <html>
   <head>
     <meta charset='utf-8'>
-    <title>Mandatory Cybersecurity Annual Training</title>
+    <title>Mandatory Software Development Annual Training</title>
     <style>
       body {{ font-family: Arial, sans-serif; max-width: 980px; margin: 2rem auto; background: #f2f4f8; }}
       .banner {{ background: #112f6f; color: white; padding: 1rem; border-radius: .5rem; }}
@@ -156,11 +156,11 @@ async fn home(State(state): State<AppState>) -> Html<String> {
   </head>
   <body>
     <div class='banner'>
-      <h1>Cyber Security Annual Training</h1>
+      <h1>Software Development Annual Training</h1>
       <p>Please complete all required media modules and proceed to the quiz. Passing score: 80%.</p>
     </div>
     {}
-    <a class='btn' href='/quiz'>Proceed to Compliance Quiz</a>
+    <a class='btn' href='/quiz'>Proceed to Development Practices Quiz</a>
   </body>
 </html>",
         videos_html
@@ -205,7 +205,7 @@ async fn quiz_page(State(state): State<AppState>) -> Html<String> {
         r"<!doctype html>
 <html><head><meta charset='utf-8'><title>Quiz</title></head>
 <body style='font-family: Arial, sans-serif; max-width: 850px; margin: 2rem auto;'>
-<h1>Compliance Knowledge Check</h1>
+<h1>Software Development Knowledge Check</h1>
 <form method='post' action='/quiz'>
 <label>Your full name: <input type='text' name='employee_name' required></label><br><br>
 <input type='hidden' name='selected_question_ids' value='{}'>
@@ -357,10 +357,11 @@ async fn result_page(
             "<p>Certificate issued. ID: <code>{cert_id}</code></p><p>Your completion certificate is ready as a PDF. It includes a verification code that can be used to validate training completion.</p><p><a href='/certificate/{cert_id}' download>Download completion certificate (.pdf)</a></p><script>setTimeout(function () {{  if (confirm('You passed! Download your completion certificate PDF now?')) {{    window.location.href = '/certificate/{cert_id}';  }}}}, 300);</script>"
         )
     } else {
-        "<p>No certificate issued. Please retake training and achieve at least 80%.</p>".to_string()
+        "<p>No certificate issued. Please retake the training and achieve at least 80%.</p>"
+            .to_string()
     };
     Html(format!(
-        "<h1>Exam Result: {status}</h1><p>Score: {}/{} ({:.1}%)</p>{}<p><a href='/'>Back to training portal</a></p>",
+        "<h1>Exam Result: {status}</h1><p>Score: {}/{} ({:.1}%)</p>{}<p><a href='/'>Back to development training portal</a></p>",
         result.score, result.total, pct, cert_msg
     ))
 }
@@ -399,7 +400,7 @@ fn escape_pdf_text(input: &str) -> String {
 }
 fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
     let lines = vec![
-        "Cybersecurity Annual Training Completion Certificate".to_string(),
+        "Software Development Annual Training Completion Certificate".to_string(),
         format!("Employee: {}", cert.employee_name),
         format!("Certificate ID: {}", cert.cert_id),
         format!("Completed At (UTC): {}", cert.issued_at_utc),
@@ -487,8 +488,8 @@ fn seed_questions() -> Vec<Question> {
                 "Run git merge, see conflict markers, delete the weird-looking lines, and commit whatever still compiles.",
                 "Force-push main over everyone else’s work because true fusion requires dominance.",
                 "Carefully review each conflict, understand both sides of the change, resolve the file intentionally, run the tests, then commit the merge.",
-                "Accept all incoming changes because the other branch probably had more confidence."
-             ],
+                "Accept all incoming changes because the other branch probably had more confidence.",
+            ],
             correct: 2,
         },
         Question {
@@ -498,7 +499,7 @@ fn seed_questions() -> Vec<Question> {
                 "Share references across threads freely; the borrow checker is just being dramatic.",
                 "Use static mut for shared state because nothing says “cautious” like global chaos.",
                 "Ensure shared data satisfies the right lifetime, Send, and Sync requirements, and use safe synchronization primitives like Arc<Mutex<T>> or Arc<RwLock<T>> when ownership crosses thread boundaries.",
-                "Add lifetime annotations everywhere until the code looks like it was attacked by punctuation."
+                "Add lifetime annotations everywhere until the code looks like it was attacked by punctuation.",
             ],
             correct: 2,
         },
