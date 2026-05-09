@@ -398,25 +398,25 @@ fn escape_pdf_text(input: &str) -> String {
 fn build_certificate_pdf(cert: &Certificate, badge_png: &[u8]) -> std::io::Result<Vec<u8>> {
     let content = format!(
         "q
-0.91 0.95 1 rg
+1 1 1 rg
 0 0 792 612 re
 f
 Q
 \
 q
-0.83 0.90 0.99 rg
+1 1 1 rg
 0 0 792 612 re
 f
 Q
 \
 q
-0.75 0.84 0.97 rg
+1 1 1 rg
 0 0 792 612 re
 f
 Q
 \
 q
-0.93 0.97 1 rg
+1 1 1 rg
 28 28 736 556 re
 f
 Q
@@ -490,17 +490,17 @@ S
 Q
 \
 q
-220 0 0 220 286 252 cm
+240 0 0 240 80 205 cm
 /Im1 Do
 Q
 \
 BT
 /F1 38 Tf
-205 500 Td
+350 500 Td
 (Completion Certificate) Tj
 \
 0 -44 Td
-/F1 18 Tf
+/F1 16 Tf
 (Awarded for successful completion of Annual Software Development Training) Tj
 \
 0 -68 Td
@@ -508,7 +508,7 @@ BT
 (Presented to) Tj
 \
 0 -42 Td
-/F1 34 Tf
+/F1 28 Tf
 ({}) Tj
 \
 0 -54 Td
