@@ -393,13 +393,28 @@ fn escape_pdf_text(input: &str) -> String {
 }
 fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
     let content = format!(
-        "q\n0.97 0.94 0.84 rg\n0 0 792 612 re\nf\nQ\n\
+        "q\n0.91 0.95 1 rg\n0 0 792 612 re\nf\nQ\n\
+q\n0.83 0.90 0.99 rg\n0 0 792 612 re\nf\nQ\n\
+q\n0.75 0.84 0.97 rg\n0 0 792 612 re\nf\nQ\n\
+q\n0.93 0.97 1 rg\n28 28 736 556 re\nf\nQ\n\
+q\n0.73 0.82 0.96 rg\n40 40 712 532 re\nS\nQ\n\
+q\n0.65 0.76 0.95 rg\n52 52 688 508 re\nS\nQ\n\
+q\n0.84 0.91 1 rg\n56 56 680 500 re\nf\nQ\n\
+q\n0.75 0.86 0.99 rg\n70 70 652 472 re\nf\nQ\n\
+q\n0.82 0.90 0.99 rg\n80 500 632 3 re\nf\n80 118 632 3 re\nf\nQ\n\
+q\n0.79 0.87 0.98 rg\n120 450 560 2 re\nf\n120 170 560 2 re\nf\nQ\n\
+q\n0.20 0.35 0.66 RG\n6 w\n30 30 732 552 re\nS\nQ\n\
+q\n0.27 0.46 0.80 RG\n2 w\n48 48 696 516 re\nS\nQ\n\
+q\n0.23 0.38 0.70 rg\n620 60 m\n672 60 l\n688 76 l\n688 128 l\n672 144 l\n620 144 l\n604 128 l\n604 76 l\nh\nf\nQ\n\
+q\n0.88 0.92 0.99 rg\n646 90 24 24 re\nf\nQ\n\
+q\n0.20 0.33 0.61 rg\n654 98 8 8 re\nf\nQ\n\
+q\n0.18 0.31 0.58 rg\n104 472 m\n124 482 l\n144 472 l\n130 490 l\n152 492 l\n132 500 l\n112 500 l\n92 492 l\n114 490 l\nh\nf\nQ\n\
+q\n0.18 0.31 0.58 rg\n648 472 m\n668 482 l\n688 472 l\n674 490 l\n696 492 l\n676 500 l\n656 500 l\n636 492 l\n658 490 l\nh\nf\nQ\n\
+BT\n/F1 11 Tf\n96 520 Td\n(EAGLE SECURITY CREST) Tj\n\
+540 0 Td\n(EAGLE SECURITY CREST) Tj\n\
+ET\n\
 q\n0.76 0.65 0.37 RG\n6 w\n30 30 732 552 re\nS\nQ\n\
 q\n0.86 0.77 0.50 RG\n2 w\n48 48 696 516 re\nS\nQ\n\
-q\n0.22 0.22 0.35 rg\n80 500 632 3 re\nf\n80 118 632 3 re\nf\nQ\n\
-q\n1 0.96 0.82 rg\n620 60 m\n672 60 l\n688 76 l\n688 128 l\n672 144 l\n620 144 l\n604 128 l\n604 76 l\nh\nf\nQ\n\
-q\n0.78 0.60 0.15 rg\n646 90 24 24 re\nf\nQ\n\
-q\n0.55 0.40 0.10 rg\n654 98 8 8 re\nf\nQ\n\
 BT\n/F1 38 Tf\n205 500 Td\n(Completion Certificate) Tj\n\
 0 -44 Td\n/F1 18 Tf\n(Awarded for successful completion of Annual Software Development Training) Tj\n\
 0 -68 Td\n/F1 20 Tf\n(Presented to) Tj\n\
