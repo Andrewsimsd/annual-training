@@ -1,8 +1,5 @@
 use crate::certificate::{build_certificate, write_certificate_files};
-use crate::quiz::{
-    Question, choose_quiz_questions, evaluate_quiz, parse_answers, seed_questions,
-    select_questions_by_id,
-};
+use crate::quiz::{Question, QuizOperations, QuizService, seed_questions};
 use axum::{
     Router,
     body::Body,
@@ -22,6 +19,7 @@ const ENABLE_DEBUG_SKIP: bool = true;
 struct AppState {
     videos: Arc<Vec<Video>>,
     quizzes: Arc<Vec<Question>>,
+    quiz_service: Arc<QuizService>,
     results: Arc<RwLock<HashMap<String, ExamAttempt>>>,
     cert_dir: Arc<PathBuf>,
 }
@@ -60,6 +58,7 @@ pub async fn run() {
     let state = AppState {
         videos: Arc::new(seed_videos()),
         quizzes: Arc::new(seed_questions()),
+        quiz_service: Arc::new(QuizService),
         results: Arc::new(RwLock::new(HashMap::new())),
         cert_dir: Arc::new(cert_dir),
     };
@@ -136,7 +135,7 @@ async fn home(State(state): State<AppState>) -> Html<String> {
 }
 
 async fn quiz_page(State(state): State<AppState>) -> Html<String> {
-    let selected_questions = choose_quiz_questions(&state.quizzes);
+    let selected_questions = state.quiz_service.choose_questions(&state.quizzes);
     let selected_ids = selected_questions
         .iter()
         .map(|question| question.id)
@@ -191,7 +190,9 @@ async fn submit_quiz(
     Form(payload): Form<QuizForm>,
 ) -> impl IntoResponse {
     let skip_requested = ENABLE_DEBUG_SKIP && payload.debug_skip.is_some();
-    let selected_questions = select_questions_by_id(&state.quizzes, &payload.selected_question_ids);
+    let selected_questions = state
+        .quiz_service
+        .select_questions_by_id(&state.quizzes, &payload.selected_question_ids);
     if selected_questions.is_empty() {
         return Redirect::to("/quiz");
     }
@@ -202,9 +203,11 @@ async fn submit_quiz(
             .map(|(idx, question)| (format!("q{idx}"), question.correct))
             .collect()
     } else {
-        parse_answers(&payload.answers)
+        state.quiz_service.parse_answers(&payload.answers)
     };
-    let evaluation = evaluate_quiz(&selected_questions, &parsed_answers);
+    let evaluation = state
+        .quiz_service
+        .evaluate(&selected_questions, &parsed_answers);
     let employee_name = if skip_requested {
         "debug".to_owned()
     } else {

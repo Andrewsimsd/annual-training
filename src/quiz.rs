@@ -17,50 +17,58 @@ pub(crate) struct QuizEvaluation {
     pub(crate) passed: bool,
 }
 
-pub(crate) fn parse_answers(raw_answers: &HashMap<String, String>) -> HashMap<String, usize> {
-    raw_answers
-        .iter()
-        .filter_map(|(key, value)| {
-            if !key.starts_with('q') {
-                return None;
-            }
-            value
-                .parse::<usize>()
-                .ok()
-                .map(|parsed| (key.clone(), parsed))
-        })
-        .collect()
+pub(crate) trait QuizOperations {
+    fn parse_answers(&self, raw_answers: &HashMap<String, String>) -> HashMap<String, usize>;
+    fn choose_questions(&self, question_bank: &[Question]) -> Vec<Question>;
+    fn select_questions_by_id(&self, question_bank: &[Question], raw_ids: &str) -> Vec<Question>;
+    fn evaluate(&self, questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation;
 }
 
-pub(crate) fn choose_quiz_questions(question_bank: &[Question]) -> Vec<Question> {
-    question_bank.to_vec()
-}
+pub(crate) struct QuizService;
 
-pub(crate) fn select_questions_by_id(question_bank: &[Question], raw_ids: &str) -> Vec<Question> {
-    raw_ids
-        .split(',')
-        .filter_map(|id| question_bank.iter().find(|question| question.id == id))
-        .cloned()
-        .collect()
-}
+impl QuizOperations for QuizService {
+    fn parse_answers(&self, raw_answers: &HashMap<String, String>) -> HashMap<String, usize> {
+        raw_answers
+            .iter()
+            .filter_map(|(key, value)| {
+                if !key.starts_with('q') {
+                    return None;
+                }
+                value
+                    .parse::<usize>()
+                    .ok()
+                    .map(|parsed| (key.clone(), parsed))
+            })
+            .collect()
+    }
 
-pub(crate) fn evaluate_quiz(
-    questions: &[Question],
-    answers: &HashMap<String, usize>,
-) -> QuizEvaluation {
-    let score = questions
-        .iter()
-        .enumerate()
-        .filter(
-            |(idx, q)| matches!(answers.get(&format!("q{idx}")), Some(ans) if *ans == q.correct),
-        )
-        .count();
-    let total = questions.len();
-    let pct = score as f32 / total as f32;
-    QuizEvaluation {
-        score,
-        total,
-        passed: pct >= PASS_THRESHOLD,
+    fn choose_questions(&self, question_bank: &[Question]) -> Vec<Question> {
+        question_bank.to_vec()
+    }
+
+    fn select_questions_by_id(&self, question_bank: &[Question], raw_ids: &str) -> Vec<Question> {
+        raw_ids
+            .split(',')
+            .filter_map(|id| question_bank.iter().find(|question| question.id == id))
+            .cloned()
+            .collect()
+    }
+
+    fn evaluate(&self, questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation {
+        let score = questions
+            .iter()
+            .enumerate()
+            .filter(
+                |(idx, q)| matches!(answers.get(&format!("q{idx}")), Some(ans) if *ans == q.correct),
+            )
+            .count();
+        let total = questions.len();
+        let pct = score as f32 / total as f32;
+        QuizEvaluation {
+            score,
+            total,
+            passed: pct >= PASS_THRESHOLD,
+        }
     }
 }
 
