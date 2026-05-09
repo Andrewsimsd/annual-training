@@ -538,7 +538,8 @@ ET
         escape_pdf_text(&cert.verification_code),
     );
 
-    let (badge_width, badge_height, badge_stream) = encode_badge_stream(badge_png)?;
+    let (badge_width, badge_height, badge_stream, badge_alpha_stream) =
+        encode_badge_streams(badge_png)?;
     let mut pdf = Vec::new();
     pdf.extend_from_slice(
         b"%PDF-1.4
@@ -590,7 +591,7 @@ endobj
     pdf.extend_from_slice(
         format!(
             "6 0 obj
-<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>
+<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 7 0 R /Filter /FlateDecode /Length {} >>
 stream
 ",
             badge_width,
@@ -607,10 +608,31 @@ endobj
 ",
     );
 
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(
+        format!(
+            "7 0 obj
+<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>
+stream
+",
+            badge_width,
+            badge_height,
+            badge_alpha_stream.len()
+        )
+        .as_bytes(),
+    );
+    pdf.extend_from_slice(&badge_alpha_stream);
+    pdf.extend_from_slice(
+        b"
+endstream
+endobj
+",
+    );
+
     let xref_start = pdf.len();
     pdf.extend_from_slice(
         b"xref
-0 7
+0 8
 0000000000 65535 f 
 ",
     );
@@ -626,7 +648,7 @@ endobj
     }
     pdf.extend_from_slice(
         b"trailer
-<< /Size 7 /Root 1 0 R >>
+<< /Size 8 /Root 1 0 R >>
 ",
     );
     pdf.extend_from_slice(
@@ -642,23 +664,41 @@ endobj
     Ok(pdf)
 }
 
-fn encode_badge_stream(png_bytes: &[u8]) -> std::io::Result<(u32, u32, Vec<u8>)> {
+fn encode_badge_streams(png_bytes: &[u8]) -> std::io::Result<(u32, u32, Vec<u8>, Vec<u8>)> {
     let image = ImageReader::new(Cursor::new(png_bytes))
         .with_guessed_format()
         .map_err(|err| std::io::Error::other(format!("badge format error: {err}")))?
         .decode()
         .map_err(|err| std::io::Error::other(format!("badge decode error: {err}")))?
-        .to_rgb8();
+        .to_rgba8();
     let (width, height) = image.dimensions();
-    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    let (rgb, alpha): (Vec<u8>, Vec<u8>) =
+        image
+            .into_raw()
+            .chunks_exact(4)
+            .fold((Vec::new(), Vec::new()), |mut channels, pixel| {
+                channels.0.extend_from_slice(&pixel[..3]);
+                channels.1.push(pixel[3]);
+                channels
+            });
+    let mut rgb_encoder =
+        flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
     use std::io::Write as _;
-    encoder
-        .write_all(&image.into_raw())
+    rgb_encoder
+        .write_all(&rgb)
         .map_err(|err| std::io::Error::other(format!("badge stream write error: {err}")))?;
-    let compressed = encoder
+    let compressed_rgb = rgb_encoder
         .finish()
         .map_err(|err| std::io::Error::other(format!("badge compression error: {err}")))?;
-    Ok((width, height, compressed))
+    let mut alpha_encoder =
+        flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    alpha_encoder
+        .write_all(&alpha)
+        .map_err(|err| std::io::Error::other(format!("badge alpha stream write error: {err}")))?;
+    let compressed_alpha = alpha_encoder
+        .finish()
+        .map_err(|err| std::io::Error::other(format!("badge alpha compression error: {err}")))?;
+    Ok((width, height, compressed_rgb, compressed_alpha))
 }
 
 fn seed_videos() -> Vec<Video> {
