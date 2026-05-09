@@ -6,10 +6,12 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
 };
+use image::ImageReader;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
+    io::Cursor,
     net::SocketAddr,
     path::{Path as StdPath, PathBuf},
     sync::Arc,
@@ -325,12 +327,14 @@ fn build_certificate(
     }
 }
 async fn write_certificate_files(cert_dir: &StdPath, cert: &Certificate) -> std::io::Result<()> {
+    let badge_path = StdPath::new("resources").join("badge.png");
+    let badge_bytes = tokio::fs::read(&badge_path).await?;
     let cert_json = serde_json::to_string_pretty(cert)
         .map_err(|err| std::io::Error::other(format!("serialization error: {err}")))?;
     let json_path = cert_dir.join(format!("certificate-{}.json", cert.cert_id));
     tokio::fs::write(json_path, cert_json).await?;
     let pdf_path = cert_dir.join(format!("certificate-{}.pdf", cert.cert_id));
-    tokio::fs::write(pdf_path, build_certificate_pdf(cert)).await
+    tokio::fs::write(pdf_path, build_certificate_pdf(cert, &badge_bytes)?).await
 }
 async fn result_page(
     State(state): State<AppState>,
@@ -391,39 +395,140 @@ fn escape_pdf_text(input: &str) -> String {
         .replace('(', "\\(")
         .replace(')', "\\)")
 }
-fn build_certificate_pdf(cert: &Certificate) -> Vec<u8> {
+fn build_certificate_pdf(cert: &Certificate, badge_png: &[u8]) -> std::io::Result<Vec<u8>> {
     let content = format!(
-        "q\n0.91 0.95 1 rg\n0 0 792 612 re\nf\nQ\n\
-q\n0.83 0.90 0.99 rg\n0 0 792 612 re\nf\nQ\n\
-q\n0.75 0.84 0.97 rg\n0 0 792 612 re\nf\nQ\n\
-q\n0.93 0.97 1 rg\n28 28 736 556 re\nf\nQ\n\
-q\n0.73 0.82 0.96 rg\n40 40 712 532 re\nS\nQ\n\
-q\n0.65 0.76 0.95 rg\n52 52 688 508 re\nS\nQ\n\
-q\n0.84 0.91 1 rg\n56 56 680 500 re\nf\nQ\n\
-q\n0.75 0.86 0.99 rg\n70 70 652 472 re\nf\nQ\n\
-q\n0.82 0.90 0.99 rg\n80 500 632 3 re\nf\n80 118 632 3 re\nf\nQ\n\
-q\n0.79 0.87 0.98 rg\n120 450 560 2 re\nf\n120 170 560 2 re\nf\nQ\n\
-q\n0.20 0.35 0.66 RG\n6 w\n30 30 732 552 re\nS\nQ\n\
-q\n0.27 0.46 0.80 RG\n2 w\n48 48 696 516 re\nS\nQ\n\
-q\n0.23 0.38 0.70 rg\n620 60 m\n672 60 l\n688 76 l\n688 128 l\n672 144 l\n620 144 l\n604 128 l\n604 76 l\nh\nf\nQ\n\
-q\n0.88 0.92 0.99 rg\n646 90 24 24 re\nf\nQ\n\
-q\n0.20 0.33 0.61 rg\n654 98 8 8 re\nf\nQ\n\
-q\n0.18 0.31 0.58 rg\n104 472 m\n124 482 l\n144 472 l\n130 490 l\n152 492 l\n132 500 l\n112 500 l\n92 492 l\n114 490 l\nh\nf\nQ\n\
-q\n0.18 0.31 0.58 rg\n648 472 m\n668 482 l\n688 472 l\n674 490 l\n696 492 l\n676 500 l\n656 500 l\n636 492 l\n658 490 l\nh\nf\nQ\n\
-BT\n/F1 11 Tf\n96 520 Td\n(EAGLE SECURITY CREST) Tj\n\
-540 0 Td\n(EAGLE SECURITY CREST) Tj\n\
-ET\n\
-q\n0.76 0.65 0.37 RG\n6 w\n30 30 732 552 re\nS\nQ\n\
-q\n0.86 0.77 0.50 RG\n2 w\n48 48 696 516 re\nS\nQ\n\
-BT\n/F1 38 Tf\n205 500 Td\n(Completion Certificate) Tj\n\
-0 -44 Td\n/F1 18 Tf\n(Awarded for successful completion of Annual Software Development Training) Tj\n\
-0 -68 Td\n/F1 20 Tf\n(Presented to) Tj\n\
-0 -42 Td\n/F1 34 Tf\n({}) Tj\n\
-0 -54 Td\n/F1 18 Tf\n(Completed At \\(UTC\\): {}) Tj\n\
-0 -30 Td\n(Certificate ID: {}) Tj\n\
-0 -30 Td\n(Score: {}/{} \\({:.1}%\\)) Tj\n\
-0 -30 Td\n(Verification Code: {}) Tj\n\
-0 -52 Td\n/F1 13 Tf\n(Use certificate ID and verification code to confirm completion.) Tj\nET\n",
+        "q
+0.91 0.95 1 rg
+0 0 792 612 re
+f
+Q
+\
+q
+0.83 0.90 0.99 rg
+0 0 792 612 re
+f
+Q
+\
+q
+0.75 0.84 0.97 rg
+0 0 792 612 re
+f
+Q
+\
+q
+0.93 0.97 1 rg
+28 28 736 556 re
+f
+Q
+\
+q
+0.73 0.82 0.96 rg
+40 40 712 532 re
+S
+Q
+\
+q
+0.65 0.76 0.95 rg
+52 52 688 508 re
+S
+Q
+\
+q
+0.84 0.91 1 rg
+56 56 680 500 re
+f
+Q
+\
+q
+0.75 0.86 0.99 rg
+70 70 652 472 re
+f
+Q
+\
+q
+0.82 0.90 0.99 rg
+80 500 632 3 re
+f
+80 118 632 3 re
+f
+Q
+\
+q
+0.79 0.87 0.98 rg
+120 450 560 2 re
+f
+120 170 560 2 re
+f
+Q
+\
+q
+0.20 0.35 0.66 RG
+6 w
+30 30 732 552 re
+S
+Q
+\
+q
+0.27 0.46 0.80 RG
+2 w
+48 48 696 516 re
+S
+Q
+\
+q
+0.76 0.65 0.37 RG
+6 w
+30 30 732 552 re
+S
+Q
+\
+q
+0.86 0.77 0.50 RG
+2 w
+48 48 696 516 re
+S
+Q
+\
+q
+220 0 0 220 286 252 cm
+/Im1 Do
+Q
+\
+BT
+/F1 38 Tf
+205 500 Td
+(Completion Certificate) Tj
+\
+0 -44 Td
+/F1 18 Tf
+(Awarded for successful completion of Annual Software Development Training) Tj
+\
+0 -68 Td
+/F1 20 Tf
+(Presented to) Tj
+\
+0 -42 Td
+/F1 34 Tf
+({}) Tj
+\
+0 -54 Td
+/F1 18 Tf
+(Completed At \\(UTC\\): {}) Tj
+\
+0 -30 Td
+(Certificate ID: {}) Tj
+\
+0 -30 Td
+(Score: {}/{} \\({:.1}%\\)) Tj
+\
+0 -30 Td
+(Verification Code: {}) Tj
+\
+0 -52 Td
+/F1 13 Tf
+(Use certificate ID and verification code to confirm completion.) Tj
+ET
+",
         escape_pdf_text(&cert.employee_name),
         escape_pdf_text(&cert.issued_at_utc),
         escape_pdf_text(&cert.cert_id),
@@ -432,32 +537,130 @@ BT\n/F1 38 Tf\n205 500 Td\n(Completion Certificate) Tj\n\
         cert.score_percent,
         escape_pdf_text(&cert.verification_code),
     );
-    let content_len = content.len();
-    let mut pdf = String::from("%PDF-1.4\n");
-    let mut offsets = vec![0usize];
+
+    let (badge_width, badge_height, badge_stream) = encode_badge_stream(badge_png)?;
+    let mut pdf = Vec::new();
+    pdf.extend_from_slice(
+        b"%PDF-1.4
+",
+    );
+    let mut offsets = vec![0_usize];
+
     offsets.push(pdf.len());
-    pdf.push_str("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    pdf.extend_from_slice(
+        b"1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+",
+    );
     offsets.push(pdf.len());
-    pdf.push_str("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    pdf.extend_from_slice(
+        b"2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+",
+    );
     offsets.push(pdf.len());
-    pdf.push_str("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n");
+    pdf.extend_from_slice(b"3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 5 0 R >>
+endobj
+");
     offsets.push(pdf.len());
-    pdf.push_str("4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    pdf.extend_from_slice(
+        b"4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+",
+    );
     offsets.push(pdf.len());
-    pdf.push_str(&format!(
-        "5 0 obj\n<< /Length {} >>\nstream\n{}endstream\nendobj\n",
-        content_len, content
-    ));
+    pdf.extend_from_slice(
+        format!(
+            "5 0 obj
+<< /Length {} >>
+stream
+{}endstream
+endobj
+",
+            content.len(),
+            content
+        )
+        .as_bytes(),
+    );
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(
+        format!(
+            "6 0 obj
+<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>
+stream
+",
+            badge_width,
+            badge_height,
+            badge_stream.len()
+        )
+        .as_bytes(),
+    );
+    pdf.extend_from_slice(&badge_stream);
+    pdf.extend_from_slice(
+        b"
+endstream
+endobj
+",
+    );
+
     let xref_start = pdf.len();
-    pdf.push_str("xref\n0 6\n");
-    pdf.push_str("0000000000 65535 f \n");
+    pdf.extend_from_slice(
+        b"xref
+0 7
+0000000000 65535 f 
+",
+    );
     for off in offsets.iter().skip(1) {
-        pdf.push_str(&format!("{:010} 00000 n \n", off));
+        pdf.extend_from_slice(
+            format!(
+                "{:010} 00000 n 
+",
+                off
+            )
+            .as_bytes(),
+        );
     }
-    pdf.push_str("trailer\n<< /Size 6 /Root 1 0 R >>\n");
-    pdf.push_str(&format!("startxref\n{}\n%%EOF\n", xref_start));
-    pdf.into_bytes()
+    pdf.extend_from_slice(
+        b"trailer
+<< /Size 7 /Root 1 0 R >>
+",
+    );
+    pdf.extend_from_slice(
+        format!(
+            "startxref
+{}
+%%EOF
+",
+            xref_start
+        )
+        .as_bytes(),
+    );
+    Ok(pdf)
 }
+
+fn encode_badge_stream(png_bytes: &[u8]) -> std::io::Result<(u32, u32, Vec<u8>)> {
+    let image = ImageReader::new(Cursor::new(png_bytes))
+        .with_guessed_format()
+        .map_err(|err| std::io::Error::other(format!("badge format error: {err}")))?
+        .decode()
+        .map_err(|err| std::io::Error::other(format!("badge decode error: {err}")))?
+        .to_rgb8();
+    let (width, height) = image.dimensions();
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    use std::io::Write as _;
+    encoder
+        .write_all(&image.into_raw())
+        .map_err(|err| std::io::Error::other(format!("badge stream write error: {err}")))?;
+    let compressed = encoder
+        .finish()
+        .map_err(|err| std::io::Error::other(format!("badge compression error: {err}")))?;
+    Ok((width, height, compressed))
+}
+
 fn seed_videos() -> Vec<Video> {
     vec![
         Video {
