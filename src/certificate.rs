@@ -1,3 +1,5 @@
+//! Certificate domain logic and PDF rendering utilities.
+
 use image::ImageReader;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -16,6 +18,18 @@ pub(crate) struct Certificate {
 }
 
 pub(crate) trait CertificateOperations {
+    /// Builds an in-memory certificate record for a successful attempt.
+    ///
+    /// # Parameters
+    ///
+    /// - `cert_id`: Unique certificate identifier.
+    /// - `employee_name`: Display name rendered on certificate output.
+    /// - `score`: Number of correct answers.
+    /// - `total`: Total number of questions.
+    ///
+    /// # Returns
+    ///
+    /// A [`Certificate`] ready for serialization and PDF generation.
     fn build_certificate(
         &self,
         cert_id: &str,
@@ -24,12 +38,23 @@ pub(crate) trait CertificateOperations {
         total: usize,
     ) -> Certificate;
 
+    /// Persists the certificate JSON and PDF artifacts to `cert_dir`.
+    ///
+    /// # Errors
+    ///
+    /// Returns I/O or serialization errors when badge loading or artifact
+    /// writing fails.
     async fn write_certificate_files(
         &self,
         cert_dir: &StdPath,
         cert: &Certificate,
     ) -> std::io::Result<()>;
 
+    /// Produces a short deterministic verification code used for manual validation.
+    ///
+    /// # Returns
+    ///
+    /// A 12-character uppercase token derived from certificate metadata.
     fn verification_code(
         &self,
         cert_id: &str,
@@ -42,6 +67,7 @@ pub(crate) trait CertificateOperations {
 pub(crate) struct CertificateService;
 
 impl CertificateOperations for CertificateService {
+    /// Creates a certificate payload with timestamp, digest, and verification code.
     fn build_certificate(
         &self,
         cert_id: &str,
@@ -65,6 +91,7 @@ impl CertificateOperations for CertificateService {
         }
     }
 
+    /// Writes both JSON metadata and a PDF certificate to disk.
     async fn write_certificate_files(
         &self,
         cert_dir: &StdPath,
@@ -80,6 +107,7 @@ impl CertificateOperations for CertificateService {
         tokio::fs::write(pdf_path, build_certificate_pdf(cert, &badge_bytes)?).await
     }
 
+    /// Derives a stable 12-character uppercase verification token from certificate inputs.
     fn verification_code(
         &self,
         cert_id: &str,
@@ -93,6 +121,15 @@ impl CertificateOperations for CertificateService {
     }
 }
 
+/// Escapes text content to remain valid inside PDF text drawing operators.
+///
+/// # Parameters
+///
+/// - `input`: Raw text potentially containing reserved PDF delimiters.
+///
+/// # Returns
+///
+/// Escaped text safe for direct insertion into PDF content streams.
 fn escape_pdf_text(input: &str) -> String {
     input
         .replace('\\', "\\\\")
@@ -104,6 +141,24 @@ fn escape_pdf_text(input: &str) -> String {
     clippy::too_many_lines,
     reason = "The handcrafted PDF template is intentionally kept in one place to preserve certificate layout."
 )]
+/// Builds the final PDF bytes for a completion certificate.
+///
+/// # Parameters
+///
+/// - `cert`: Certificate metadata to render.
+/// - `badge_png`: Badge image bytes loaded from `resources/badge.png`.
+///
+/// # Returns
+///
+/// A complete PDF file payload.
+///
+/// # Errors
+///
+/// Returns an error when badge decoding/compression fails.
+///
+/// # See also
+///
+/// - [`encode_badge_streams`]
 fn build_certificate_pdf(cert: &Certificate, badge_png: &[u8]) -> std::io::Result<Vec<u8>> {
     let content = format!(
         "q
@@ -373,6 +428,16 @@ endobj
     Ok(pdf)
 }
 
+/// Decodes RGBA badge bytes and returns compressed RGB and alpha streams for PDF embedding.
+///
+/// # Returns
+///
+/// `(width, height, rgb_stream, alpha_stream)` where color and alpha channels
+/// are flate-compressed for insertion by [`build_certificate_pdf`].
+///
+/// # Errors
+///
+/// Returns an error when image format detection, decode, or compression fails.
 fn encode_badge_streams(png_bytes: &[u8]) -> std::io::Result<(u32, u32, Vec<u8>, Vec<u8>)> {
     let image = ImageReader::new(Cursor::new(png_bytes))
         .with_guessed_format()
