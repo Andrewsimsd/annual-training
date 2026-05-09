@@ -69,50 +69,276 @@ fn escape_pdf_text(input: &str) -> String {
         .replace(')', "\\)")
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "The handcrafted PDF template is intentionally kept in one place to preserve certificate layout."
+)]
 fn build_certificate_pdf(cert: &Certificate, badge_png: &[u8]) -> std::io::Result<Vec<u8>> {
     let content = format!(
-        "BT /F1 12 Tf 80 500 Td ({}) Tj ET",
-        escape_pdf_text(&cert.employee_name)
+        "q
+1 1 1 rg
+0 0 792 612 re
+f
+Q
+\
+q
+1 1 1 rg
+0 0 792 612 re
+f
+Q
+\
+q
+1 1 1 rg
+0 0 792 612 re
+f
+Q
+\
+q
+1 1 1 rg
+28 28 736 556 re
+f
+Q
+\
+q
+0.73 0.82 0.96 rg
+40 40 712 532 re
+S
+Q
+\
+q
+0.65 0.76 0.95 rg
+52 52 688 508 re
+S
+Q
+\
+q
+0.84 0.91 1 rg
+56 56 680 500 re
+f
+Q
+\
+q
+0.75 0.86 0.99 rg
+70 70 652 472 re
+f
+Q
+\
+q
+0.82 0.90 0.99 rg
+80 500 632 3 re
+f
+80 118 632 3 re
+f
+Q
+\
+q
+0.79 0.87 0.98 rg
+120 450 560 2 re
+f
+120 170 560 2 re
+f
+Q
+\
+q
+0.20 0.35 0.66 RG
+6 w
+30 30 732 552 re
+S
+Q
+\
+q
+0.27 0.46 0.80 RG
+2 w
+48 48 696 516 re
+S
+Q
+\
+q
+0.76 0.65 0.37 RG
+6 w
+30 30 732 552 re
+S
+Q
+\
+q
+0.86 0.77 0.50 RG
+2 w
+48 48 696 516 re
+S
+Q
+\
+q
+170 0 0 170 545 85 cm
+/Im1 Do
+Q
+\
+BT
+/F1 38 Tf
+80 500 Td
+(Completion Certificate) Tj
+\
+0 -44 Td
+/F1 16 Tf
+(Awarded for successful completion of Annual Software Development Training) Tj
+\
+0 -68 Td
+/F1 20 Tf
+(Presented to) Tj
+\
+0 -42 Td
+/F1 28 Tf
+({}) Tj
+\
+0 -54 Td
+/F1 18 Tf
+(Completed At \\(UTC\\): {}) Tj
+\
+0 -30 Td
+(Certificate ID: {}) Tj
+\
+0 -30 Td
+(Score: {}/{} \\({:.1}%\\)) Tj
+\
+0 -30 Td
+(Verification Code: {}) Tj
+\
+0 -52 Td
+/F1 13 Tf
+(Use certificate ID and verification code to confirm completion.) Tj
+ET
+",
+        escape_pdf_text(&cert.employee_name),
+        escape_pdf_text(&cert.issued_at_utc),
+        escape_pdf_text(&cert.cert_id),
+        cert.score,
+        cert.total,
+        cert.score_percent,
+        escape_pdf_text(&cert.verification_code),
     );
+
     let (badge_width, badge_height, badge_stream, badge_alpha_stream) =
         encode_badge_streams(badge_png)?;
     let mut pdf = Vec::new();
-    pdf.extend_from_slice(b"%PDF-1.4\n");
+    pdf.extend_from_slice(
+        b"%PDF-1.4
+",
+    );
     let mut offsets = vec![0_usize];
-    offsets.push(pdf.len());
-    pdf.extend_from_slice(b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
-    offsets.push(pdf.len());
-    pdf.extend_from_slice(b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
-    offsets.push(pdf.len());
-    pdf.extend_from_slice(b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 5 0 R >>\nendobj\n");
+
     offsets.push(pdf.len());
     pdf.extend_from_slice(
-        b"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        b"1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+",
+    );
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(
+        b"2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+",
+    );
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(b"3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 6 0 R >> >> /Contents 5 0 R >>
+endobj
+");
+    offsets.push(pdf.len());
+    pdf.extend_from_slice(
+        b"4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+",
     );
     offsets.push(pdf.len());
     pdf.extend_from_slice(
         format!(
-            "5 0 obj\n<< /Length {} >>\nstream\n{}\nendstream\nendobj\n",
+            "5 0 obj
+<< /Length {} >>
+stream
+{}endstream
+endobj
+",
             content.len(),
             content
         )
         .as_bytes(),
     );
     offsets.push(pdf.len());
-    pdf.extend_from_slice(format!("6 0 obj\n<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 7 0 R /Filter /FlateDecode /Length {} >>\nstream\n", badge_width, badge_height, badge_stream.len()).as_bytes());
+    pdf.extend_from_slice(
+        format!(
+            "6 0 obj
+<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 7 0 R /Filter /FlateDecode /Length {} >>
+stream
+",
+            badge_width,
+            badge_height,
+            badge_stream.len()
+        )
+        .as_bytes(),
+    );
     pdf.extend_from_slice(&badge_stream);
-    pdf.extend_from_slice(b"\nendstream\nendobj\n");
+    pdf.extend_from_slice(
+        b"
+endstream
+endobj
+",
+    );
+
     offsets.push(pdf.len());
-    pdf.extend_from_slice(format!("7 0 obj\n<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>\nstream\n", badge_width, badge_height, badge_alpha_stream.len()).as_bytes());
+    pdf.extend_from_slice(
+        format!(
+            "7 0 obj
+<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length {} >>
+stream
+",
+            badge_width,
+            badge_height,
+            badge_alpha_stream.len()
+        )
+        .as_bytes(),
+    );
     pdf.extend_from_slice(&badge_alpha_stream);
-    pdf.extend_from_slice(b"\nendstream\nendobj\n");
+    pdf.extend_from_slice(
+        b"
+endstream
+endobj
+",
+    );
+
     let xref_start = pdf.len();
-    pdf.extend_from_slice(b"xref\n0 8\n0000000000 65535 f \n");
+    pdf.extend_from_slice(
+        b"xref
+0 8
+0000000000 65535 f 
+",
+    );
     for off in offsets.iter().skip(1) {
-        pdf.extend_from_slice(format!("{:010} 00000 n \n", off).as_bytes());
+        pdf.extend_from_slice(
+            format!(
+                "{:010} 00000 n 
+",
+                off
+            )
+            .as_bytes(),
+        );
     }
-    pdf.extend_from_slice(b"trailer\n<< /Size 8 /Root 1 0 R >>\n");
-    pdf.extend_from_slice(format!("startxref\n{}\n%%EOF\n", xref_start).as_bytes());
+    pdf.extend_from_slice(
+        b"trailer
+<< /Size 8 /Root 1 0 R >>
+",
+    );
+    pdf.extend_from_slice(
+        format!(
+            "startxref
+{}
+%%EOF
+",
+            xref_start
+        )
+        .as_bytes(),
+    );
     Ok(pdf)
 }
 
