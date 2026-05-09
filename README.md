@@ -1,6 +1,6 @@
-# Annual Training (Parody Cybersecurity Module)
+# Annual Training (Parody Software Development Module)
 
-A local Rust web app that mimics mandatory annual cybersecurity training with meme/video modules, a quiz, and pass/fail certificate output.
+A local Rust web app that mimics mandatory annual software development training with meme/video modules, a quiz, and pass/fail certificate output.
 
 ## Features
 
