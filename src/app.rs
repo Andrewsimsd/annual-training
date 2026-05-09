@@ -6,7 +6,6 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::get,
 };
-use rand::{rng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -19,7 +18,6 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 const PASS_THRESHOLD: f32 = 0.80;
-const QUIZ_QUESTION_COUNT: usize = 5;
 const ENABLE_DEBUG_SKIP: bool = true;
 
 #[derive(Clone)]
@@ -168,7 +166,7 @@ async fn home(State(state): State<AppState>) -> Html<String> {
 }
 
 async fn quiz_page(State(state): State<AppState>) -> Html<String> {
-    let selected_questions = choose_quiz_questions(&state.quizzes, QUIZ_QUESTION_COUNT);
+    let selected_questions = choose_quiz_questions(&state.quizzes);
     let selected_ids = selected_questions
         .iter()
         .map(|question| question.id)
@@ -279,13 +277,8 @@ fn parse_answers(raw_answers: &HashMap<String, String>) -> HashMap<String, usize
         })
         .collect()
 }
-fn choose_quiz_questions(question_bank: &[Question], question_count: usize) -> Vec<Question> {
-    let mut shuffled = question_bank.to_vec();
-    shuffled.shuffle(&mut rng());
-    shuffled
-        .into_iter()
-        .take(question_count.min(question_bank.len()))
-        .collect()
+fn choose_quiz_questions(question_bank: &[Question]) -> Vec<Question> {
+    question_bank.to_vec()
 }
 fn select_questions_by_id(question_bank: &[Question], raw_ids: &str) -> Vec<Question> {
     raw_ids
