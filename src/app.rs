@@ -1,4 +1,4 @@
-use crate::certificate::{build_certificate, write_certificate_files};
+use crate::certificate::{CertificateOperations, CertificateService};
 use crate::quiz::{Question, QuizOperations, QuizService, seed_questions};
 use axum::{
     Router,
@@ -22,6 +22,7 @@ struct AppState {
     quiz_service: Arc<QuizService>,
     results: Arc<RwLock<HashMap<String, ExamAttempt>>>,
     cert_dir: Arc<PathBuf>,
+    certificate_service: Arc<CertificateService>,
 }
 
 #[derive(Clone, Serialize)]
@@ -61,6 +62,7 @@ pub async fn run() {
         quiz_service: Arc::new(QuizService),
         results: Arc::new(RwLock::new(HashMap::new())),
         cert_dir: Arc::new(cert_dir),
+        certificate_service: Arc::new(CertificateService),
     };
 
     let app = Router::new()
@@ -216,8 +218,17 @@ async fn submit_quiz(
     let mut cert_id = None;
     if evaluation.passed {
         let id = Uuid::new_v4().to_string();
-        let cert = build_certificate(&id, &employee_name, evaluation.score, evaluation.total);
-        if let Err(err) = write_certificate_files(&state.cert_dir, &cert).await {
+        let cert = state.certificate_service.build_certificate(
+            &id,
+            &employee_name,
+            evaluation.score,
+            evaluation.total,
+        );
+        if let Err(err) = state
+            .certificate_service
+            .write_certificate_files(&state.cert_dir, &cert)
+            .await
+        {
             eprintln!("failed to persist certificate files: {err}");
         } else {
             cert_id = Some(id);
