@@ -1,3 +1,5 @@
+//! Certificate domain logic and PDF rendering utilities.
+
 use image::ImageReader;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -16,6 +18,7 @@ pub(crate) struct Certificate {
 }
 
 pub(crate) trait CertificateOperations {
+    /// Builds an in-memory certificate record for a successful attempt.
     fn build_certificate(
         &self,
         cert_id: &str,
@@ -24,12 +27,14 @@ pub(crate) trait CertificateOperations {
         total: usize,
     ) -> Certificate;
 
+    /// Persists the certificate JSON and PDF artifacts to `cert_dir`.
     async fn write_certificate_files(
         &self,
         cert_dir: &StdPath,
         cert: &Certificate,
     ) -> std::io::Result<()>;
 
+    /// Produces a short deterministic verification code used for manual validation.
     fn verification_code(
         &self,
         cert_id: &str,
@@ -42,6 +47,7 @@ pub(crate) trait CertificateOperations {
 pub(crate) struct CertificateService;
 
 impl CertificateOperations for CertificateService {
+    /// Creates a certificate payload with timestamp, digest, and verification code.
     fn build_certificate(
         &self,
         cert_id: &str,
@@ -65,6 +71,7 @@ impl CertificateOperations for CertificateService {
         }
     }
 
+    /// Writes both JSON metadata and a PDF certificate to disk.
     async fn write_certificate_files(
         &self,
         cert_dir: &StdPath,
@@ -80,6 +87,7 @@ impl CertificateOperations for CertificateService {
         tokio::fs::write(pdf_path, build_certificate_pdf(cert, &badge_bytes)?).await
     }
 
+    /// Derives a stable 12-character uppercase verification token from certificate inputs.
     fn verification_code(
         &self,
         cert_id: &str,
@@ -93,6 +101,7 @@ impl CertificateOperations for CertificateService {
     }
 }
 
+/// Escapes text content to remain valid inside PDF text drawing operators.
 fn escape_pdf_text(input: &str) -> String {
     input
         .replace('\\', "\\\\")
@@ -373,6 +382,7 @@ endobj
     Ok(pdf)
 }
 
+/// Decodes RGBA badge bytes and returns compressed RGB and alpha streams for PDF embedding.
 fn encode_badge_streams(png_bytes: &[u8]) -> std::io::Result<(u32, u32, Vec<u8>, Vec<u8>)> {
     let image = ImageReader::new(Cursor::new(png_bytes))
         .with_guessed_format()

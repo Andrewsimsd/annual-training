@@ -1,3 +1,8 @@
+//! HTTP application layer for the annual training portal.
+//!
+//! This module owns request routing, HTML rendering, quiz submission handling,
+//! and certificate download endpoints.
+
 use crate::certificate::{CertificateOperations, CertificateService};
 use crate::quiz::{Question, QuizOperations, QuizService, seed_questions};
 use axum::{
@@ -49,6 +54,10 @@ struct QuizForm {
     answers: HashMap<String, String>,
 }
 
+/// Starts the local web server and initializes application state.
+///
+/// The server binds to `127.0.0.1:3000`, creates the certificate output
+/// directory when needed, and attempts to open the browser automatically.
 pub async fn run() {
     let cert_dir = PathBuf::from("certificates");
     if let Err(err) = tokio::fs::create_dir_all(&cert_dir).await {
@@ -93,6 +102,7 @@ pub async fn run() {
     }
 }
 
+/// Renders the training landing page with all required video modules.
 async fn home(State(state): State<AppState>) -> Html<String> {
     let videos_html = state
         .videos
@@ -136,6 +146,7 @@ async fn home(State(state): State<AppState>) -> Html<String> {
     ))
 }
 
+/// Renders the quiz form and embeds question identifiers for answer evaluation.
 async fn quiz_page(State(state): State<AppState>) -> Html<String> {
     let selected_questions = state.quiz_service.choose_questions(&state.quizzes);
     let selected_ids = selected_questions
@@ -187,6 +198,10 @@ async fn quiz_page(State(state): State<AppState>) -> Html<String> {
     ))
 }
 
+/// Processes quiz submissions, evaluates answers, and stores the attempt result.
+///
+/// For passing attempts, this handler also attempts to persist certificate files
+/// and associates the certificate identifier with the stored result ticket.
 async fn submit_quiz(
     State(state): State<AppState>,
     Form(payload): Form<QuizForm>,
@@ -247,6 +262,7 @@ async fn submit_quiz(
     Redirect::to(&format!("/result?ticket={ticket}"))
 }
 
+/// Displays the result page for a previously submitted exam ticket.
 async fn result_page(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
@@ -274,6 +290,12 @@ async fn result_page(
     ))
 }
 
+/// Returns a generated certificate PDF when `cert_id` exists on disk.
+///
+/// # Returns
+///
+/// - `200 OK` with `application/pdf` for known certificates.
+/// - `404 Not Found` when the certificate file is missing.
 async fn download_certificate(
     State(state): State<AppState>,
     Path(cert_id): Path<String>,
@@ -297,6 +319,7 @@ async fn download_certificate(
     }
 }
 
+/// Seeds all mandatory video modules shown on the training landing page.
 fn seed_videos() -> Vec<Video> {
     vec![
         Video {

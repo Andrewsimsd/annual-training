@@ -1,3 +1,5 @@
+//! Quiz domain logic for answer parsing, selection, and scoring.
+
 use std::collections::HashMap;
 
 const PASS_THRESHOLD: f32 = 0.80;
@@ -18,15 +20,20 @@ pub(crate) struct QuizEvaluation {
 }
 
 pub(crate) trait QuizOperations {
+    /// Converts posted form values into typed answer indices keyed by question field name.
     fn parse_answers(&self, raw_answers: &HashMap<String, String>) -> HashMap<String, usize>;
+    /// Chooses which questions should appear in the next quiz attempt.
     fn choose_questions(&self, question_bank: &[Question]) -> Vec<Question>;
+    /// Resolves a comma-separated list of question IDs into concrete questions.
     fn select_questions_by_id(&self, question_bank: &[Question], raw_ids: &str) -> Vec<Question>;
+    /// Evaluates submitted answers against the selected questions.
     fn evaluate(&self, questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation;
 }
 
 pub(crate) struct QuizService;
 
 impl QuizOperations for QuizService {
+    /// Parses quiz answer fields (`q{index}`) and ignores unrelated form inputs.
     fn parse_answers(&self, raw_answers: &HashMap<String, String>) -> HashMap<String, usize> {
         raw_answers
             .iter()
@@ -42,10 +49,14 @@ impl QuizOperations for QuizService {
             .collect()
     }
 
+    /// Returns all available questions in stable order.
+    ///
+    /// The application currently serves the full question bank each attempt.
     fn choose_questions(&self, question_bank: &[Question]) -> Vec<Question> {
         question_bank.to_vec()
     }
 
+    /// Maps selected question identifiers into concrete questions while preserving ID order.
     fn select_questions_by_id(&self, question_bank: &[Question], raw_ids: &str) -> Vec<Question> {
         raw_ids
             .split(',')
@@ -54,6 +65,7 @@ impl QuizOperations for QuizService {
             .collect()
     }
 
+    /// Computes quiz score, total question count, and pass/fail status.
     fn evaluate(&self, questions: &[Question], answers: &HashMap<String, usize>) -> QuizEvaluation {
         let score = questions
             .iter()
@@ -76,6 +88,7 @@ impl QuizOperations for QuizService {
     clippy::too_many_lines,
     reason = "Keeping complete seed content together preserves training bank readability and expected behavior."
 )]
+/// Returns the canonical question bank used by the quiz workflow.
 pub(crate) fn seed_questions() -> Vec<Question> {
     vec![
         Question {
